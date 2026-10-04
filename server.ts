@@ -4,6 +4,11 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import { procurementAgentOrchestrator } from './src/services/agent/orchestrator';
+import { runAgentTestSuite } from './src/services/agent/agentTestSuite';
+import { AgentExecutionContext } from './src/services/agent/types';
+import { processHumanDecision } from './src/services/agent/approvalStateMachine';
+import { auditTrailService } from './src/services/agent/auditTrailService';
 
 dotenv.config();
 
@@ -760,6 +765,152 @@ app.get('/api/files', (req: Request, res: Response) => {
     res.json({ files: list });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to list files' });
+  }
+});
+
+// ----------------------------------------------------------------------------
+// 6. Dedicated Agentic Procurement Endpoint (Part 2 Isolated Layer)
+// ----------------------------------------------------------------------------
+
+const SERVER_AGENT_SESSIONS = new Map<string, AgentExecutionContext>();
+
+// Execute Agentic Procurement Session
+app.post('/api/agent/procurement-agent', async (req: Request, res: Response) => {
+  try {
+    const { requestId, purchaseRequest, userId, userRole, procurementObjective, useGeminiReasoning } = req.body;
+
+    // 1. Run deterministic agent orchestrator
+    const context = await procurementAgentOrchestrator.executeSession({
+      requestId,
+      purchaseRequest,
+      userId,
+      userRole,
+      procurementObjective,
+    });
+
+    // 2. Optional Agentic AI Interpretation via Gemini (Augmentation only; deterministic math is untouched)
+    const ai = getGeminiClient();
+    if (useGeminiReasoning && ai && context.preliminaryRecommendation) {
+      try {
+        const prompt = `
+You are the Executive Agentic Procurement Reviewer for AutoProcure AI.
+The agent orchestrator has gathered verified evidence from specialist agents:
+- Item: "${context.procurementRequest.itemDescription || 'Unspecified'}"
+- Requested Qty: ${context.procurementRequest.quantity || 1} units
+- Deterministic Decision: ${context.existingEngineResults?.decisionResult?.decision || 'REVIEW'}
+- Inventory Usable: ${context.agentResults.INVENTORY_AGENT?.evidence?.excessOrIdleStock || 0} units
+- Historical Supply: ${context.agentResults.HISTORICAL_AGENT?.evidence?.monthsOfSupply || 0} months
+- Recommended Action: ${context.preliminaryRecommendation.recommendedAction}
+- Risk Level: ${context.riskAssessment?.riskLevel || 'LOW'}
+- Conflicts: ${JSON.stringify(context.riskAssessment?.conflicts || [])}
+
+Provide a concise, 1-2 sentence executive operational insight contextualizing this agentic result.
+Do not recalculate numbers.
+`;
+        const aiResponse = await withTimeout(
+          ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: prompt,
+          }),
+          8000,
+          'Gemini agentic summary timeout'
+        );
+        const text = aiResponse.text?.trim();
+        if (text) {
+          context.events.push({
+            id: `EVT-${Date.now()}-AI`,
+            timestamp: new Date().toISOString(),
+            type: 'EVIDENCE_CONSOLIDATED',
+            specialist: 'PLANNING_AGENT',
+            message: `Gemini Operational Insight: ${text}`,
+          });
+        }
+      } catch (geminiErr: any) {
+        console.warn('Gemini agentic augmentation skipped (deterministic core preserved):', geminiErr?.message);
+      }
+    }
+
+    // 3. Store in isolated server session registry
+    SERVER_AGENT_SESSIONS.set(context.sessionId, context);
+
+    return res.json(context);
+  } catch (error: any) {
+    console.error('Error executing agent session:', error);
+    return res.status(500).json({ error: error?.message || 'Agent session execution failed' });
+  }
+});
+
+// List all sessions
+app.get('/api/agent/sessions', (req: Request, res: Response) => {
+  const sessions = Array.from(SERVER_AGENT_SESSIONS.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  res.json({ sessions });
+});
+
+// Get session by ID
+app.get('/api/agent/sessions/:sessionId', (req: Request, res: Response) => {
+  const session = SERVER_AGENT_SESSIONS.get(req.params.sessionId);
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+  res.json(session);
+});
+
+// Human Approval Gateway Decision Endpoint
+app.post('/api/agent/approval', (req: Request, res: Response) => {
+  try {
+    const { sessionId, decision, actor, comments } = req.body;
+    const session = SERVER_AGENT_SESSIONS.get(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: `Session ${sessionId} not found.` });
+    }
+    const result = processHumanDecision(session, decision, actor, comments);
+    if (result.success) {
+      SERVER_AGENT_SESSIONS.set(sessionId, result.context);
+    }
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Approval transition failed' });
+  }
+});
+
+// Get Audit Trail for Session
+app.get('/api/agent/audit-trail/:sessionId', (req: Request, res: Response) => {
+  const session = SERVER_AGENT_SESSIONS.get(req.params.sessionId);
+  if (session && session.auditTrail && session.auditTrail.length > 0) {
+    return res.json({ auditTrail: session.auditTrail });
+  }
+  const events = auditTrailService.getSessionEvents(req.params.sessionId);
+  return res.json({ auditTrail: events });
+});
+
+// Get Agent Workflow History
+app.get('/api/agent/history', (req: Request, res: Response) => {
+  const sessions = Array.from(SERVER_AGENT_SESSIONS.values()).map((s) => ({
+    sessionId: s.sessionId,
+    requestId: s.requestId,
+    itemDescription: s.procurementRequest.itemDescription,
+    quantity: s.procurementRequest.quantity,
+    department: s.procurementRequest.department,
+    agentRecommendation: s.preliminaryRecommendation?.recommendedAction || s.existingEngineResults?.decisionResult?.decision,
+    riskLevel: s.riskAssessment?.riskLevel || 'LOW',
+    approvalState: s.approvalState,
+    humanDecision: s.humanDecision?.decision || 'PENDING',
+    actorName: s.humanDecision?.actorName,
+    timestamp: s.createdAt,
+    completedAt: s.completedAt,
+  })).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  res.json({ history: sessions });
+});
+
+// Run isolated 13-point Agent Test Suite
+app.get('/api/agent/test-suite', async (req: Request, res: Response) => {
+  try {
+    const summary = await runAgentTestSuite();
+    res.json(summary);
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to run agent test suite' });
   }
 });
 

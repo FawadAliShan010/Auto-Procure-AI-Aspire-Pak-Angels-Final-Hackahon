@@ -14,6 +14,7 @@ import { RequestsView } from './views/RequestsView';
 import { AnalyticsView } from './views/AnalyticsView';
 import { SettingsView } from './views/SettingsView';
 import { HistoricalDataView } from './views/HistoricalDataView';
+import { AgenticProcurementView } from './views/AgenticProcurementView';
 import { motion, AnimatePresence } from 'motion/react';
 
 const AppContent: React.FC = () => {
@@ -43,6 +44,8 @@ const AppContent: React.FC = () => {
         return <SettingsView />;
       case '/historical-data':
         return <HistoricalDataView />;
+      case '/agentic':
+        return <AgenticProcurementView />;
       default:
         return <DashboardView />;
     }

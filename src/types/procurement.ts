@@ -9,7 +9,8 @@ export type RoutePath =
   | '/requests'
   | '/analytics'
   | '/settings'
-  | '/historical-data';
+  | '/historical-data'
+  | '/agentic';
 
 export type EnterpriseRole = 'REQUISITIONER' | 'PURCHASE_MANAGER' | 'ADMIN';
 

@@ -17,6 +17,7 @@ import {
   LogOut,
   Lock,
   UserCheck,
+  Bot,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { UserAvatar } from '../common/UserAvatar';
@@ -64,6 +65,12 @@ export const Sidebar: React.FC = () => {
           { path: '/analytics' as RoutePath, label: 'Analytics', icon: BarChart3 },
         ]
       : []),
+    {
+      path: '/agentic' as RoutePath,
+      label: 'Agentic AI',
+      icon: Bot,
+      badge: 'PART 2',
+    },
     {
       path: '/settings',
       label: isAdmin ? 'Admin & Settings' : isReq ? 'My Profile' : 'Settings',
