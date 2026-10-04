@@ -1,0 +1,38 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Default Deny: All paths closed unless explicitly granted
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions for security enforcement
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidImage() {
+      return request.resource.size < 5 * 1024 * 1024 // 5 MB maximum size limit
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    // Profile Pictures collection scoped strictly by authenticated user ID
+    // Path structure: profilePictures/{userId}/{fileName}
+    match /profilePictures/{userId}/{fileName} {
+      // Authenticated users can view profile pictures (enables avatars in PRs, reviews & audit logs)
+      allow read: if isSignedIn();
+
+      // Only the specific authenticated user can upload or overwrite their own profile picture
+      // Validates authentication, ownership, file size (<5MB), and MIME type (JPEG, PNG, WebP)
+      allow write: if isOwner(userId) && isValidImage();
+
+      // Only the owner can delete their own profile image
+      allow delete: if isOwner(userId);
+    }
+  }
+}

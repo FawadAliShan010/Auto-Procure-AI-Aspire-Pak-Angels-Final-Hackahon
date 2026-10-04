@@ -1,0 +1,692 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with enterprise role-based permissions",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique Firebase Authentication UID",
+          "maxLength": 128
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Full display name of user",
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Corporate email address",
+          "maxLength": 160
+        },
+        "role": {
+          "type": "string",
+          "enum": ["REQUISITIONER", "PURCHASE_MANAGER", "ADMIN"],
+          "description": "Procurement authorization role"
+        },
+        "department": {
+          "type": "string",
+          "description": "Associated cost center or operating department",
+          "maxLength": 100
+        },
+        "profilePictureRef": {
+          "type": "string",
+          "description": "Cloud Storage path or public avatar URL reference",
+          "maxLength": 512
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account registration timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Profile last modification timestamp"
+        }
+      },
+      "required": ["id", "displayName", "email", "role", "createdAt", "updatedAt"]
+    },
+    "PurchaseRequisition": {
+      "title": "PurchaseRequisition",
+      "description": "Core enterprise purchase requisition entity",
+      "type": "object",
+      "properties": {
+        "requisitionId": {
+          "type": "string",
+          "description": "Unique formal PR number (e.g. PR-2026-0042)",
+          "maxLength": 64
+        },
+        "requester": {
+          "type": "object",
+          "description": "Metadata of the requesting employee"
+        },
+        "department": {
+          "type": "string",
+          "description": "Operating department or cost center",
+          "maxLength": 80
+        },
+        "siteLocation": {
+          "type": "string",
+          "description": "Target plant or delivery site location",
+          "maxLength": 80
+        },
+        "requestDate": {
+          "type": "string",
+          "format": "date",
+          "description": "Calendar date requisition was lodged"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["DRAFT", "PENDING_AUDIT", "AUDITED", "MANAGER_REVIEW", "APPROVED", "REDUCED", "HOLD", "REJECTED", "DISPATCHED"],
+          "description": "Lifecycle status of the requisition"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["LOW", "STANDARD", "HIGH", "URGENT"],
+          "description": "Urgency rating"
+        },
+        "totalEstimatedValue": {
+          "type": "number",
+          "description": "Aggregated estimated monetary value"
+        },
+        "currency": {
+          "type": "string",
+          "maxLength": 8,
+          "description": "ISO Currency code"
+        },
+        "lineItemCount": {
+          "type": "number",
+          "description": "Total number of items in this PR"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Optional requisitioner remarks"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["requisitionId", "department", "siteLocation", "requestDate", "status", "priority", "totalEstimatedValue", "createdAt", "updatedAt"]
+    },
+    "RequisitionLineItem": {
+      "title": "RequisitionLineItem",
+      "description": "Individual line item belonging to a Purchase Requisition",
+      "type": "object",
+      "properties": {
+        "itemId": {
+          "type": "string",
+          "description": "Unique line item identifier",
+          "maxLength": 64
+        },
+        "requisitionId": {
+          "type": "string",
+          "description": "Parent requisition identifier",
+          "maxLength": 64
+        },
+        "sku": {
+          "type": "string",
+          "description": "Official catalog SKU/item code if resolved",
+          "maxLength": 64
+        },
+        "originalDescription": {
+          "type": "string",
+          "description": "Raw unstandardized text as typed by requisitioner",
+          "maxLength": 500
+        },
+        "standardizedDescription": {
+          "type": "string",
+          "description": "ERP-compliant normalized catalog description",
+          "maxLength": 500
+        },
+        "requestedQuantity": {
+          "type": "number",
+          "description": "Units requested"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit of measure (e.g. EA, BOX, KG)",
+          "maxLength": 24
+        },
+        "estimatedUnitPrice": {
+          "type": "number",
+          "description": "Estimated single unit price"
+        },
+        "totalValue": {
+          "type": "number",
+          "description": "Quantity multiplied by unit price"
+        },
+        "glCode": {
+          "type": "string",
+          "description": "General Ledger account code",
+          "maxLength": 32
+        },
+        "unspscCategory": {
+          "type": "string",
+          "description": "UNSPSC commodity category code",
+          "maxLength": 64
+        },
+        "gateResults": {
+          "type": "object",
+          "description": "Map of verification gate results"
+        },
+        "finalDecision": {
+          "type": "object",
+          "description": "Manager decision details"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["itemId", "requisitionId", "originalDescription", "requestedQuantity", "unit", "createdAt", "updatedAt"]
+    },
+    "ItemMaster": {
+      "title": "ItemMaster",
+      "description": "Universal master catalog item definitions",
+      "type": "object",
+      "properties": {
+        "itemId": {
+          "type": "string",
+          "description": "Unique master item ID",
+          "maxLength": 64
+        },
+        "officialSku": {
+          "type": "string",
+          "description": "Official ERP catalog SKU",
+          "maxLength": 64
+        },
+        "standardizedDescription": {
+          "type": "string",
+          "description": "Normalized catalog description",
+          "maxLength": 300
+        },
+        "category": {
+          "type": "string",
+          "description": "Procurement commodity category",
+          "maxLength": 80
+        },
+        "unit": {
+          "type": "string",
+          "description": "Standard inventory unit of measure",
+          "maxLength": 24
+        },
+        "glCode": {
+          "type": "string",
+          "description": "General Ledger accounting code",
+          "maxLength": 32
+        },
+        "unspscCode": {
+          "type": "string",
+          "description": "UNSPSC classification code",
+          "maxLength": 32
+        },
+        "aliases": {
+          "type": "array",
+          "description": "List of keywords, alternate terms, and common misspellings"
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether item is currently procurable"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["itemId", "officialSku", "standardizedDescription", "category", "unit", "active", "createdAt", "updatedAt"]
+    },
+    "HistoricalTransaction": {
+      "title": "HistoricalTransaction",
+      "description": "Immutable ledger of past purchases and consumption issues",
+      "type": "object",
+      "properties": {
+        "transactionId": {
+          "type": "string",
+          "description": "Unique transaction record identifier",
+          "maxLength": 64
+        },
+        "itemId": {
+          "type": "string",
+          "description": "Associated item SKU if matched",
+          "maxLength": 64
+        },
+        "rawItemDescription": {
+          "type": "string",
+          "description": "Source item description as recorded in legacy system",
+          "maxLength": 500
+        },
+        "standardizedItemDescription": {
+          "type": "string",
+          "description": "Cleaned standardized description",
+          "maxLength": 500
+        },
+        "transactionDate": {
+          "type": "string",
+          "format": "date",
+          "description": "Date transaction occurred"
+        },
+        "quantityPurchased": {
+          "type": "number",
+          "description": "Purchased volume if purchase transaction"
+        },
+        "quantityConsumed": {
+          "type": "number",
+          "description": "Issued/consumed volume if usage transaction"
+        },
+        "siteLocation": {
+          "type": "string",
+          "description": "Operating plant or warehouse site",
+          "maxLength": 80
+        },
+        "department": {
+          "type": "string",
+          "description": "Consuming cost center or department",
+          "maxLength": 80
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit of measure",
+          "maxLength": 24
+        },
+        "sourceFileId": {
+          "type": "string",
+          "description": "Reference ID of source Excel/CSV file",
+          "maxLength": 64
+        },
+        "importBatchId": {
+          "type": "string",
+          "description": "Batch processing identifier",
+          "maxLength": 64
+        },
+        "dataQualityStatus": {
+          "type": "string",
+          "enum": ["VALID", "WARNING", "CORRECTED", "FLAGGED"],
+          "description": "Data validation rating from ingestion engine"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["transactionId", "rawItemDescription", "transactionDate", "createdAt"]
+    },
+    "UploadedFileMetadata": {
+      "title": "UploadedFileMetadata",
+      "description": "Metadata tracking files uploaded to Cloud Storage",
+      "type": "object",
+      "properties": {
+        "fileId": {
+          "type": "string",
+          "description": "Unique file identifier",
+          "maxLength": 64
+        },
+        "originalFilename": {
+          "type": "string",
+          "description": "Original file name uploaded by user",
+          "maxLength": 255
+        },
+        "storagePath": {
+          "type": "string",
+          "description": "Cloud Storage object URI/path",
+          "maxLength": 512
+        },
+        "uploadedBy": {
+          "type": "object",
+          "description": "User info who performed upload"
+        },
+        "uploadedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "fileType": {
+          "type": "string",
+          "description": "MIME type (e.g. xlsx, csv)",
+          "maxLength": 100
+        },
+        "fileSize": {
+          "type": "number",
+          "description": "Size in bytes"
+        },
+        "importStatus": {
+          "type": "string",
+          "enum": ["PENDING", "PROCESSING", "COMPLETED", "FAILED", "PARTIAL"],
+          "description": "Ingestion pipeline status"
+        },
+        "totalRows": {
+          "type": "number",
+          "description": "Total rows detected in sheet"
+        },
+        "validRows": {
+          "type": "number",
+          "description": "Clean valid rows"
+        },
+        "correctedRows": {
+          "type": "number",
+          "description": "Rows auto-corrected by data cleaning rules"
+        },
+        "warningRows": {
+          "type": "number",
+          "description": "Rows with warnings"
+        },
+        "rejectedRows": {
+          "type": "number",
+          "description": "Corrupted or non-parseable rows"
+        },
+        "importBatchId": {
+          "type": "string",
+          "description": "Unique batch ID",
+          "maxLength": 64
+        },
+        "errorMessage": {
+          "type": "string",
+          "description": "Error details if failed",
+          "maxLength": 1000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["fileId", "originalFilename", "storagePath", "uploadedAt", "fileType", "fileSize", "importStatus", "createdAt", "updatedAt"]
+    },
+    "ImportBatch": {
+      "title": "ImportBatch",
+      "description": "Full audit lifecycle record for historical data imports",
+      "type": "object",
+      "properties": {
+        "batchId": {
+          "type": "string",
+          "description": "Unique batch processing identifier",
+          "maxLength": 64
+        },
+        "sourceFileId": {
+          "type": "string",
+          "description": "Reference ID of uploaded source file",
+          "maxLength": 64
+        },
+        "originalFilename": {
+          "type": "string",
+          "description": "Original uploaded spreadsheet filename",
+          "maxLength": 255
+        },
+        "uploadedBy": {
+          "type": "object",
+          "description": "Authorized user metadata who imported this batch"
+        },
+        "uploadedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "importStartTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "importCompletionTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "totalRows": {
+          "type": "number"
+        },
+        "validRows": {
+          "type": "number"
+        },
+        "correctedRows": {
+          "type": "number"
+        },
+        "warningRows": {
+          "type": "number"
+        },
+        "rejectedRows": {
+          "type": "number"
+        },
+        "duplicateRows": {
+          "type": "number"
+        },
+        "unmatchedItemCount": {
+          "type": "number"
+        },
+        "lowConfidenceItemCount": {
+          "type": "number"
+        },
+        "dateRange": {
+          "type": "object"
+        },
+        "importStatus": {
+          "type": "string",
+          "enum": ["UPLOADED", "PROCESSING", "READY_FOR_IMPORT", "IMPORTING", "COMPLETED", "COMPLETED_WITH_WARNINGS", "FAILED", "CANCELLED"]
+        },
+        "errorMessage": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["batchId", "sourceFileId", "originalFilename", "uploadedBy", "uploadedAt", "importStartTime", "totalRows", "importStatus", "createdAt", "updatedAt"]
+    },
+    "GateResult": {
+      "title": "GateResult",
+      "description": "Generic evaluation result from a verification gate",
+      "type": "object",
+      "properties": {
+        "gateName": {
+          "type": "string",
+          "description": "Name or identifier of gate (e.g. gate_1_cleaning, gate_2_budget)",
+          "maxLength": 64
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PASS", "WARN", "FAIL", "REVIEW", "INFO"],
+          "description": "Evaluation outcome"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "relevantMetrics": {
+          "type": "object",
+          "description": "Arbitrary key-value metrics evaluated by the gate"
+        },
+        "recommendation": {
+          "type": "string",
+          "description": "Prescriptive next step recommendation",
+          "maxLength": 500
+        },
+        "explanation": {
+          "type": "string",
+          "description": "Detailed reasoning behind recommendation",
+          "maxLength": 2000
+        },
+        "confidence": {
+          "type": "number",
+          "description": "Confidence score between 0.0 and 1.0"
+        }
+      },
+      "required": ["gateName", "status", "timestamp", "recommendation", "explanation"]
+    },
+    "ManagerDecision": {
+      "title": "ManagerDecision",
+      "description": "Purchase Manager formal decision record",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique decision document identifier",
+          "maxLength": 64
+        },
+        "requisitionId": {
+          "type": "string",
+          "description": "Target purchase requisition ID",
+          "maxLength": 64
+        },
+        "lineItemId": {
+          "type": "string",
+          "description": "Line item ID if item-level decision",
+          "maxLength": 64
+        },
+        "managerId": {
+          "type": "string",
+          "description": "Manager user UID",
+          "maxLength": 128
+        },
+        "managerName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "managerEmail": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "decision": {
+          "type": "string",
+          "enum": ["APPROVE", "REDUCE", "HOLD", "REJECT", "EXPEDITE", "OVERRIDE"],
+          "description": "Final governance decision"
+        },
+        "originalQuantity": {
+          "type": "number",
+          "description": "Quantity initially requested"
+        },
+        "approvedQuantity": {
+          "type": "number",
+          "description": "Quantity formally approved for purchase/PO"
+        },
+        "justification": {
+          "type": "string",
+          "description": "Manager reasoning or business justification",
+          "maxLength": 1000
+        },
+        "aiRecommendation": {
+          "type": "string",
+          "description": "Original AI suggestion prior to decision",
+          "maxLength": 500
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "requisitionId", "managerId", "decision", "originalQuantity", "approvedQuantity", "justification", "timestamp", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable audit trail of system and user operations",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique audit record ID",
+          "maxLength": 64
+        },
+        "user": {
+          "type": "object",
+          "description": "User who performed the action"
+        },
+        "action": {
+          "type": "string",
+          "description": "Action performed (e.g. PR_CREATED, DECISION_APPLIED)",
+          "maxLength": 64
+        },
+        "entityType": {
+          "type": "string",
+          "enum": ["PURCHASE_REQUISITION", "LINE_ITEM", "ITEM_MASTER", "UPLOADED_FILE", "HISTORICAL_TRANSACTION", "USER"],
+          "description": "Category of entity modified"
+        },
+        "entityId": {
+          "type": "string",
+          "description": "ID of affected entity",
+          "maxLength": 64
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "previousValue": {
+          "type": "object",
+          "description": "Previous state representation"
+        },
+        "newValue": {
+          "type": "object",
+          "description": "New state representation"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Audit justification or context",
+          "maxLength": 500
+        }
+      },
+      "required": ["id", "action", "entityType", "entityId", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile with enterprise RBAC roles"
+    },
+    "/purchase_requisitions/{requisitionId}": {
+      "schema": "PurchaseRequisition",
+      "description": "Collection of purchase requisitions"
+    },
+    "/purchase_requisitions/{requisitionId}/line_items/{lineItemId}": {
+      "schema": "RequisitionLineItem",
+      "description": "Individual line items for each requisition"
+    },
+    "/item_master/{itemId}": {
+      "schema": "ItemMaster",
+      "description": "Generic item catalog and SKU master"
+    },
+    "/historical_transactions/{transactionId}": {
+      "schema": "HistoricalTransaction",
+      "description": "Historical purchase and consumption transaction ledger"
+    },
+    "/uploaded_files/{fileId}": {
+      "schema": "UploadedFileMetadata",
+      "description": "Metadata for uploaded spreadsheets and files"
+    },
+    "/import_batches/{batchId}": {
+      "schema": "ImportBatch",
+      "description": "Audit records and metrics for historical import batches"
+    },
+    "/manager_decisions/{decisionId}": {
+      "schema": "ManagerDecision",
+      "description": "Audit log of purchase manager decisions and overrides"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Immutable procurement audit trail"
+    }
+  }
+}

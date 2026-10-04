@@ -1,0 +1,170 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default-deny all unlisted paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Security Primitives & Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getUserRole() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? getUserData().role
+        : 'REQUISITIONER';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        getUserRole() == 'ADMIN' ||
+        request.auth.token.email == 'fawadalishan21@gmail.com'
+      );
+    }
+
+    function isPurchaseManager() {
+      return isSignedIn() && (
+        getUserRole() == 'PURCHASE_MANAGER' ||
+        isAdmin()
+      );
+    }
+
+    // Connection health check
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // 1. User Profiles (/users/{userId})
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      // On creation, users can create their own profile
+      allow create: if isOwner(userId) && isValidId(userId);
+      // On update, owners can update their own personal info (name, department, avatar),
+      // but role changes require admin privileges or must maintain existing role
+      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // 2. Purchase Requisitions (/purchase_requisitions/{requisitionId})
+    match /purchase_requisitions/{requisitionId} {
+      // Requisitioners can only read their own requisitions; Managers and Admins can read all authorized requisitions
+      allow read: if isSignedIn() && (
+        isPurchaseManager() ||
+        resource.data.requester.id == request.auth.uid ||
+        resource.data.requester.email == request.auth.token.email
+      );
+
+      // Requisitioners can create their own PRs (with their own uid as requester)
+      allow create: if isSignedIn() && isValidId(requisitionId) && (
+        request.resource.data.requester.id == request.auth.uid ||
+        request.resource.data.requester.email == request.auth.token.email ||
+        isPurchaseManager()
+      );
+
+      // Status updates to APPROVED, REDUCE, ON_HOLD, or REJECTED require PURCHASE_MANAGER or ADMIN.
+      // Requisitioners cannot approve or reject their own requests.
+      allow update: if isSignedIn() && isValidId(requisitionId) && (
+        isPurchaseManager() ||
+        (
+          resource.data.requester.id == request.auth.uid &&
+          resource.data.status != 'APPROVED' &&
+          resource.data.status != 'REJECTED' &&
+          request.resource.data.status != 'APPROVED' &&
+          request.resource.data.status != 'REJECTED'
+        )
+      );
+
+      allow delete: if isAdmin();
+
+      // 3. Purchase Requisition Line Items Subcollection
+      match /line_items/{lineItemId} {
+        allow read: if isSignedIn() && (
+          isPurchaseManager() ||
+          get(/databases/$(database)/documents/purchase_requisitions/$(requisitionId)).data.requester.id == request.auth.uid ||
+          get(/databases/$(database)/documents/purchase_requisitions/$(requisitionId)).data.requester.email == request.auth.token.email
+        );
+        allow create: if isSignedIn() && isValidId(lineItemId) && (
+          get(/databases/$(database)/documents/purchase_requisitions/$(requisitionId)).data.requester.id == request.auth.uid ||
+          isPurchaseManager()
+        );
+        allow update: if isSignedIn() && isValidId(lineItemId) && (
+          isPurchaseManager() ||
+          get(/databases/$(database)/documents/purchase_requisitions/$(requisitionId)).data.requester.id == request.auth.uid
+        );
+        allow delete: if isPurchaseManager();
+      }
+    }
+
+    // 4. Universal Master Item Catalog (/item_master/{itemId})
+    match /item_master/{itemId} {
+      // Authenticated users can search and read items from catalog
+      allow read: if isSignedIn();
+      // Only Admin can create, modify or delete catalog items
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 5. Historical Transaction Records (/historical_transactions/{transactionId})
+    // Only Managers and Admins can read company-wide historical consumption
+    // Immutable after creation as mandated by procurement audit standards
+    match /historical_transactions/{transactionId} {
+      allow read: if isPurchaseManager();
+      allow create: if isPurchaseManager() && isValidId(transactionId);
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // 6. Uploaded File Metadata (/uploaded_files/{fileId})
+    match /uploaded_files/{fileId} {
+      allow read: if isPurchaseManager();
+      allow create, update: if isPurchaseManager() && isValidId(fileId);
+      allow delete: if isAdmin();
+    }
+
+    // 6.5. Import Batches (/import_batches/{batchId})
+    match /import_batches/{batchId} {
+      allow read: if isPurchaseManager();
+      allow create, update: if isPurchaseManager() && isValidId(batchId);
+      allow delete: if isAdmin();
+    }
+
+    // 7. Purchase Manager Decisions (/manager_decisions/{decisionId})
+    // Only an authorized PURCHASE_MANAGER or ADMIN may create a manager decision
+    // Requisitioners must NEVER be able to create or modify a manager decision
+    // Decisions are strictly immutable once created
+    match /manager_decisions/{decisionId} {
+      allow read: if isSignedIn();
+      allow create: if isPurchaseManager() && isValidId(decisionId) && (
+        request.resource.data.manager.id == request.auth.uid ||
+        request.resource.data.manager.email == request.auth.token.email ||
+        isAdmin()
+      );
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // 8. Immutable Audit Trail (/audit_logs/{logId})
+    // Only Admin can view comprehensive audit logs
+    // Authenticated users can create audit log records documenting their actions
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && isValidId(logId);
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}
